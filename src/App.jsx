@@ -3,6 +3,7 @@ import { Cloud, CloudOff, RefreshCw, TriangleAlert } from "lucide-react";
 import { useAuth } from "./hooks/useAuth";
 import { useBattery } from "./hooks/useBattery";
 import { useBatteryHistory } from "./hooks/useBatteryHistory";
+import { useIsMobile } from "./hooks/useIsMobile";
 import { loadDevice, saveAlias } from "./lib/device";
 import { applyAccent, loadAccent } from "./lib/theme";
 import { firstName, todayLabel } from "./lib/format";
@@ -37,6 +38,7 @@ export default function App() {
   const [accent, setAccent] = useState(loadAccent);
   const [view, setView] = useState("inicio");
   const [now, setNow] = useState(() => Date.now());
+  const isMobile = useIsMobile();
 
   const auth = useAuth();
   const battery = useBattery();
@@ -80,7 +82,23 @@ export default function App() {
   };
 
   const meta = PAGE_META[view];
-  const headerBadges = (
+  const mobileHome = view === "inicio" && isMobile;
+  const title = mobileHome ? "Baterías de tus computadoras" : meta.title(auth.user);
+  const subtitle = mobileHome
+    ? "Nivel real de cada computadora conectada con tu cuenta de Google."
+    : meta.subtitle;
+
+  const headerBadges = isMobile ? (
+    auth.user ? (
+      <Badge tone="blue" icon={Cloud}>
+        En tu cuenta
+      </Badge>
+    ) : (
+      <Badge tone="neutral" icon={CloudOff}>
+        Sin cuenta
+      </Badge>
+    )
+  ) : (
     <>
       <DeviceChip device={device} />
       {auth.user ? (
@@ -112,8 +130,8 @@ export default function App() {
         <main className="content">
           <PageHeader
             eyebrow={meta.eyebrow}
-            title={meta.title(auth.user)}
-            subtitle={meta.subtitle}
+            title={title}
+            subtitle={subtitle}
             badges={headerBadges}
             actions={
               view === "historial" ? (
@@ -151,6 +169,7 @@ export default function App() {
               onNavigate={setView}
               authBusy={auth.busy}
               now={now}
+              mobile={isMobile}
             />
           ) : null}
 
@@ -167,6 +186,7 @@ export default function App() {
               onSync={history.syncNow}
               authBusy={auth.busy}
               now={now}
+              mobile={isMobile}
             />
           ) : null}
 

@@ -1,5 +1,10 @@
 const DEVICE_KEY = "batterylink.web.device.v1";
 const ALIAS_KEY = "batterylink.web.alias.v1";
+const COMPUTER_PLATFORMS = new Set(["Mac", "Windows", "Linux"]);
+
+export function isComputer(entry) {
+  return COMPUTER_PLATFORMS.has(entry?.platform);
+}
 
 function readJSON(key) {
   try {

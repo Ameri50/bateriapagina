@@ -32,6 +32,7 @@ import {
 } from "./ui";
 import { GoogleMark } from "./Layout";
 import { clockTime, duration, relativeTime } from "../lib/format";
+import { isComputer } from "../lib/device";
 
 function chargingLabel(charging, level, supported) {
   if (!supported) return "No disponible";
@@ -115,13 +116,92 @@ export function Dashboard({
   onNavigate,
   authBusy,
   now,
+  mobile = false,
 }) {
   const deviceSamples = useMemo(
     () => samples.filter((sample) => sample.deviceId === device.id),
     [samples, device.id],
   );
+  const computers = useMemo(() => devices.filter((entry) => isComputer(entry)), [devices]);
+  const featured = computers[0];
+  const featuredSamples = useMemo(
+    () => (featured ? samples.filter((sample) => sample.deviceId === featured.id) : []),
+    [samples, featured],
+  );
   const summary = summarize(deviceSamples);
   const label = chargingLabel(battery.charging, battery.level, battery.supported);
+
+  if (mobile) {
+    return (
+      <>
+        <GlassCard>
+          <SectionTitle
+            icon={Laptop}
+            title="Baterías de tus computadoras"
+            subtitle={
+              user
+                ? "Nivel real de cada computadora conectada con tu cuenta."
+                : "Entra con Google para reunir las baterías de tus computadoras."
+            }
+          />
+          {computers.length > 0 ? (
+            <div className="device-list">
+              {computers.map((entry) => (
+                <DeviceRow key={entry.id} entry={entry} now={now} />
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <span className="empty-state__icon">
+                <Laptop size={22} strokeWidth={2} />
+              </span>
+              <strong>{user ? "Todavía no hay computadoras" : "Conecta tu Mac o laptop"}</strong>
+              <p>
+                {user
+                  ? "Abre esta página en tu computadora con la misma cuenta de Google y su batería aparecerá aquí."
+                  : "Entra con Google en este teléfono y en tu computadora para verlas juntas, con su nivel real."}
+              </p>
+            </div>
+          )}
+        </GlassCard>
+
+        {featured ? (
+          <GlassCard>
+            <SectionTitle
+              icon={Activity}
+              title={`Tendencia · ${featured.alias || featured.model || "computadora"}`}
+              subtitle="Muestras reales guardadas de esa computadora."
+            />
+            {featuredSamples.length >= 2 ? (
+              <TrendChart samples={featuredSamples} range="7d" />
+            ) : (
+              <p className="muted-text">
+                Aún no hay lecturas de esta computadora. Deja la página abierta en ella para empezar a guardar muestras.
+              </p>
+            )}
+          </GlassCard>
+        ) : null}
+
+        {!user ? (
+          <GlassCard className="signin-card">
+            <div className="signin-card__icon">
+              <GoogleMark />
+            </div>
+            <div className="signin-card__text">
+              <h2>Conecta tus computadoras</h2>
+              <p>
+                Inicia sesión con la misma cuenta de Google que usas en tu Mac o laptop. Sus baterías aparecerán aquí y
+                se actualizarán en vivo.
+              </p>
+            </div>
+            <ActionButton onClick={onSignIn} disabled={authBusy}>
+              {authBusy ? "Conectando…" : "Continuar con Google"}
+            </ActionButton>
+          </GlassCard>
+        ) : null}
+      </>
+    );
+  }
 
   const badges = (
     <>

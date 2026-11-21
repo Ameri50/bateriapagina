@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Cloud, CloudOff, History as HistoryIcon, CloudUpload, Smartphone } from "lucide-react";
 import { TrendChart, summarize } from "./TrendChart";
 import { ActionButton, Badge, GlassCard, InfoBanner, SectionTitle } from "./ui";
 import { GoogleMark } from "./Layout";
 import { clockTime, dayLabel, relativeTime, startOfDay } from "../lib/format";
+import { isComputer } from "../lib/device";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -40,10 +41,23 @@ export function HistoryView({
   onSync,
   authBusy,
   now,
+  mobile = false,
 }) {
   const [range, setRange] = useState("7d");
-  const [selectedDevice, setSelectedDevice] = useState(device.id);
+  const options = useMemo(
+    () => (mobile ? devices.filter((entry) => isComputer(entry)) : devices),
+    [devices, mobile],
+  );
+  const [selectedDevice, setSelectedDevice] = useState(() => (mobile ? options[0]?.id ?? "" : device.id));
 
+  useEffect(() => {
+    if (!mobile) return;
+    if (!options.some((entry) => entry.id === selectedDevice)) {
+      setSelectedDevice(options[0]?.id ?? "");
+    }
+  }, [mobile, options, selectedDevice]);
+
+  const selectedAlias = options.find((entry) => entry.id === selectedDevice)?.alias;
   const deviceSamples = useMemo(
     () => samples.filter((sample) => sample.deviceId === selectedDevice),
     [samples, selectedDevice],
@@ -118,7 +132,7 @@ export function HistoryView({
           <SectionTitle
             icon={HistoryIcon}
             title="Evolución de tu batería"
-            subtitle={`${devices.find((entry) => entry.id === selectedDevice)?.alias ?? device.alias} · muestras reales del navegador.`}
+            subtitle={`${selectedAlias ?? (mobile ? "Sin computadoras conectadas" : device.alias)} · muestras reales del navegador.`}
           />
           <div className="segmented">
             <button className={range === "24h" ? "segmented__item segmented__item--active" : "segmented__item"} onClick={() => setRange("24h")}>
@@ -130,11 +144,11 @@ export function HistoryView({
           </div>
         </div>
 
-        {devices.length > 1 ? (
+        {options.length > 1 ? (
           <label className="select-row">
             <Smartphone size={15} />
             <select value={selectedDevice} onChange={(event) => setSelectedDevice(event.target.value)}>
-              {devices.map((entry) => (
+              {options.map((entry) => (
                 <option key={entry.id} value={entry.id}>
                   {entry.alias || entry.model || entry.id}
                   {entry.current ? " (este)" : ""}
@@ -151,8 +165,12 @@ export function HistoryView({
             <span className="empty-state__icon">
               <HistoryIcon size={22} strokeWidth={2} />
             </span>
-            <strong>Sin muestras en este periodo</strong>
-            <p>Mantén la página abierta en un equipo con batería y vuelve más tarde. También puedes cambiar a 7 días.</p>
+            <strong>{mobile && options.length === 0 ? "Sin computadoras conectadas" : "Sin muestras en este periodo"}</strong>
+            <p>
+              {mobile && options.length === 0
+                ? "Abre esta página en tu Mac o laptop con la misma cuenta de Google para ver su historial aquí."
+                : "Mantén la página abierta en un equipo con batería y vuelve más tarde. También puedes cambiar a 7 días."}
+            </p>
           </div>
         )}
       </GlassCard>

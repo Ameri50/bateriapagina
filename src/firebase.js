@@ -31,9 +31,21 @@ setPersistence(auth, browserLocalPersistence).catch(() => {});
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
-export function signInWithGoogle() {
+export async function signInWithGoogle() {
   const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  return mobile ? signInWithRedirect(auth, provider) : signInWithPopup(auth, provider);
+  if (!mobile) return signInWithPopup(auth, provider);
+
+  // En iOS/Safari el redirect puede perderse por el particionado de
+  // almacenamiento; el popup sí conserva la sesión. Si el navegador lo
+  // bloquea, se cae al redirect clásico.
+  try {
+    return await signInWithPopup(auth, provider);
+  } catch (error) {
+    const code = error?.code ?? "";
+    const fallback = code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment";
+    if (!fallback) throw error;
+    return signInWithRedirect(auth, provider);
+  }
 }
 
 export function signOutOfGoogle() {

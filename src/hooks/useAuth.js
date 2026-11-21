@@ -2,6 +2,19 @@ import { useCallback, useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, consumeRedirectResult, signInWithGoogle, signOutOfGoogle } from "../firebase";
 
+const AUTH_MESSAGES = {
+  "auth/unauthorized-domain":
+    "Este dominio no está autorizado en Firebase. Agrégalo en Authentication → Settings → Authorized domains.",
+  "auth/popup-blocked": "El navegador bloqueó la ventana de Google. Permite las ventanas emergentes e inténtalo de nuevo.",
+  "auth/network-request-failed": "Sin conexión con Google. Revisa tu red e inténtalo de nuevo.",
+  "auth/operation-not-supported-in-this-environment":
+    "Este navegador no permite el inicio con ventana. Abre la página en Safari o Chrome.",
+};
+
+function describeAuthError(error) {
+  return AUTH_MESSAGES[error?.code] ?? error?.message ?? "No se pudo iniciar sesión con Google.";
+}
+
 export function useAuth() {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
@@ -14,7 +27,7 @@ export function useAuth() {
       setReady(true);
     });
     consumeRedirectResult().then((redirectError) => {
-      if (redirectError) setError(redirectError.message);
+      if (redirectError) setError(describeAuthError(redirectError));
     });
     return unsubscribe;
   }, []);
@@ -26,7 +39,7 @@ export function useAuth() {
       await signInWithGoogle();
     } catch (authError) {
       if (authError?.code !== "auth/popup-closed-by-user" && authError?.code !== "auth/cancelled-popup-request") {
-        setError(authError?.message ?? "No se pudo iniciar sesión con Google.");
+        setError(describeAuthError(authError));
       }
     } finally {
       setBusy(false);

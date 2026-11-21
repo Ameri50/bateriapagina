@@ -10,7 +10,7 @@ La pantalla replica el tablero de la app nativa BatteryLink (anillo de nivel, es
 - **Historial real por equipo**: una muestra por minuto mientras la página está abierta (máximo 720). Se guarda en `localStorage` y, con sesión, se sincroniza en tu cuenta.
 - **Google del proyecto de tesis**: inicio de sesión con Google (popup en escritorio, redirect en móvil) y almacenamiento en `users/{uid}` de Firestore. Sin sesión todo se queda en el navegador.
 - **Personalización**: saludo con tu nombre y foto de Google, nombre editable del equipo, color de acento y hasta 6 temas; cada navegador recuerda sus preferencias.
-- **Varios equipos**: el documento del usuario guarda el historial y la ficha de cada dispositivo que entra con la cuenta. El historial se puede filtrar por equipo.
+- **Varios equipos a la vez**: el documento del usuario guarda el historial y la ficha de cada dispositivo que entra con la cuenta. La lista «Tus baterías» se actualiza en vivo (nivel, estado, conexión y última lectura de cada equipo) y el historial se puede filtrar por equipo.
 - **Vistas**:
   - **Inicio**: anillo de batería, especificaciones del navegador, lista de baterías y tendencia de 7 días.
   - **Historial**: estadísticas de la semana, gráfica de 24 h o 7 días, resumen por día y últimas lecturas.
@@ -61,7 +61,9 @@ users/{uid}
       "<deviceId>": { alias, model, platform, browser, cores, memoryGB, screen, level, charging, updatedAt }
 ```
 
-El historial se escribe con `setDoc(..., { merge: true })`, se fusiona al iniciar sesión y se conserva en `localStorage` como respaldo. La sincronización ocurre cada 90 segundos, al ocultar la pestaña, al cambiar el nombre del equipo y con el botón **Sincronizar ahora**.
+El historial se escribe con transacciones que fusionan lo que haya guardado otro equipo (nadie borra las baterías del otro), se escucha con `onSnapshot` para que los equipos aparezcan sin recargar, y se conserva en `localStorage` como respaldo. Cada equipo registra un latido cada 5 minutos y sincroniza cada 90 segundos, al ocultar la pestaña, al cambiar el nombre del equipo y con el botón **Sincronizar ahora**.
+
+> iOS no permite leer la batería desde una página web (Safari, Chrome y Firefox usan WebKit). El iPhone aparece en «Tus baterías», pero su nivel solo puede reportarlo la app nativa BatteryLink.
 
 > Esta versión no modifica ni despliega reglas de Firestore. Solo lee y escribe el documento del usuario autenticado.
 

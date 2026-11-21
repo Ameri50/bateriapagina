@@ -50,29 +50,54 @@ function PlaceholderMetric({ icon, title, subtitle, hint }) {
   );
 }
 
+const ONLINE_WINDOW = 3 * 60_000;
+
+function deviceIcon(entry) {
+  const platform = entry.platform ?? "";
+  return platform === "Mac" || platform === "Windows" || platform === "Linux" ? Laptop : Smartphone;
+}
+
+function deviceState(entry) {
+  if (entry.level == null) {
+    return entry.platform === "iPhone" || entry.platform === "iPad" ? "Safari no la expone" : "Sin lectura";
+  }
+  if (entry.charging) return entry.level >= 100 ? "Completa" : "Cargando";
+  return "Descargando";
+}
+
+function deviceSnapshot(entry) {
+  const level = entry.level == null ? null : Number(entry.level);
+  const updatedAt = entry.updatedAt == null ? null : Number(entry.updatedAt);
+  return {
+    level: Number.isFinite(level) ? Math.max(0, Math.min(100, Math.round(level))) : null,
+    charging: typeof entry.charging === "boolean" ? entry.charging : null,
+    updatedAt: Number.isFinite(updatedAt) ? updatedAt : null,
+  };
+}
+
 function DeviceRow({ entry, now }) {
+  const Icon = deviceIcon(entry);
+  const { level, charging, updatedAt } = deviceSnapshot(entry);
+  const online = updatedAt != null && now - updatedAt < ONLINE_WINDOW;
+  const state = deviceState({ ...entry, level, charging });
   return (
     <div className={`device-row ${entry.current ? "device-row--current" : ""}`}>
       <span className="device-row__icon">
-        {entry.platform === "Mac" || entry.platform === "Windows" || entry.platform === "Linux" ? (
-          <Laptop size={17} strokeWidth={2.1} />
-        ) : (
-          <Smartphone size={17} strokeWidth={2.1} />
-        )}
+        <Icon size={17} strokeWidth={2.1} />
       </span>
       <div className="device-row__text">
         <strong>
           {entry.alias || entry.model || "Dispositivo"}
           {entry.current ? <span className="tag">Este</span> : null}
+          {!entry.current && online ? <span className="tag tag--live">En vivo</span> : null}
         </strong>
-        <span>
-          {[entry.model, entry.browser].filter(Boolean).join(" · ") || entry.platform}
-        </span>
+        <span>{[entry.model, entry.browser].filter(Boolean).join(" · ") || entry.platform || "Sin datos"}</span>
       </div>
-      <MiniBattery level={entry.level} charging={entry.charging} />
+      <MiniBattery level={level} charging={charging} />
       <div className="device-row__meta">
-        <strong>{entry.level == null ? "—" : `${entry.level} %`}</strong>
-        <span>{entry.updatedAt ? relativeTime(entry.updatedAt, now) : "sin lecturas"}</span>
+        <strong>{level == null ? "—" : `${level} %`}</strong>
+        <span>{state}</span>
+        <span>{updatedAt ? relativeTime(updatedAt, now) : "sin lecturas"}</span>
       </div>
     </div>
   );
@@ -168,9 +193,26 @@ export function Dashboard({
       </GlassCard>
 
       {!battery.supported ? (
-        <InfoBanner icon={BatteryLow} title="Este navegador no expone la batería" tone="warn">
-          Safari en iPhone y Firefox no permiten leerla desde una web. Abre esta página en Chrome en tu Mac, o usa la app
-          BatteryLink, que sí lee el controlador real. El historial que ya tengas guardado seguirá visible.
+        <InfoBanner
+          icon={BatteryLow}
+          title={
+            device.platform === "iPhone" || device.platform === "iPad"
+              ? `Este ${device.platform} no expone la batería a la web`
+              : "Este navegador no expone la batería"
+          }
+          tone="warn"
+        >
+          {device.platform === "iPhone" || device.platform === "iPad" ? (
+            <>
+              Safari, Chrome y Firefox en iOS usan WebKit y no permiten leerla desde una página. El equipo queda
+              registrado en «Tus baterías», pero su nivel solo puede leerlo la app nativa BatteryLink.
+            </>
+          ) : (
+            <>
+              Safari y Firefox no exponen la batería a las webs. En este equipo usa Chrome o Edge para verla aquí, o la
+              app BatteryLink, que la lee del sistema. El historial ya guardado seguirá visible.
+            </>
+          )}
         </InfoBanner>
       ) : null}
 
@@ -223,13 +265,23 @@ export function Dashboard({
           <SectionTitle
             icon={Sparkles}
             title="Tus baterías"
-            subtitle={user ? "Dispositivos que han iniciado sesión con tu cuenta." : "Este navegador y los que agregues al entrar con Google."}
+            subtitle={
+              user
+                ? `${devices.length} ${devices.length === 1 ? "equipo" : "equipos"} con tu cuenta de Google.`
+                : "Este navegador y los que agregues al entrar con Google."
+            }
           />
           <div className="device-list">
             {devices.map((entry) => (
               <DeviceRow key={entry.id} entry={entry} now={now} />
             ))}
           </div>
+          {user && devices.length <= 1 ? (
+            <p className="note-line">
+              <MonitorSmartphone size={13} /> Abre esta página en otro equipo con la misma cuenta (iPhone, otra laptop,
+              Android) y aparecerá aquí con su propia batería.
+            </p>
+          ) : null}
           {!user ? (
             <button className="link-button" onClick={onSignIn} disabled={authBusy}>
               <GoogleMark />

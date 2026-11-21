@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, onSnapshot, runTransaction, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 const HISTORY_KEY = "batterylink.web.history.v1";
 const MAX_SAMPLES = 720;
 const SYNC_INTERVAL = 90_000;
+const HEARTBEAT_INTERVAL = 5 * 60_000;
 
 function normalize(entries) {
   if (!Array.isArray(entries)) return [];
@@ -41,6 +42,14 @@ function mergeSamples(first, second) {
   return [...map.values()].sort((a, b) => a.t - b.t).slice(-MAX_SAMPLES);
 }
 
+function sameSamples(first, second) {
+  if (first.length !== second.length) return false;
+  if (first.length === 0) return true;
+  const a = first[first.length - 1];
+  const b = second[second.length - 1];
+  return a.t === b.t && a.level === b.level && a.charging === b.charging && a.deviceId === b.deviceId;
+}
+
 export function useBatteryHistory({ user, device }) {
   const [samples, setSamples] = useState(loadLocal);
   const [cloudDevices, setCloudDevices] = useState({});
@@ -52,6 +61,7 @@ export function useBatteryHistory({ user, device }) {
   const devicesRef = useRef(cloudDevices);
   const lastSyncRef = useRef(0);
   const writerRef = useRef(null);
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     samplesRef.current = samples;
@@ -88,22 +98,31 @@ export function useBatteryHistory({ user, device }) {
         charging: latest?.charging ?? devicesRef.current[device.id]?.charging ?? null,
         updatedAt: latest?.t ?? Date.now(),
       };
-      const devices = { ...devicesRef.current, [device.id]: deviceEntry };
 
       try {
-        await setDoc(
-          doc(db, "users", user.uid),
-          {
-            battery: {
-              updatedAt: serverTimestamp(),
-              history: payloadSamples.slice(-MAX_SAMPLES),
-              devices,
-            },
-          },
-          { merge: true },
-        );
-        devicesRef.current = devices;
-        setCloudDevices(devices);
+        const userRef = doc(db, "users", user.uid);
+        // Transacción: fusiona lo que ya haya escrito otro equipo para que
+        // ninguno de los dos borre las baterías del otro.
+        const result = await runTransaction(db, async (transaction) => {
+          const snapshot = await transaction.get(userRef);
+          const cloud = snapshot.data()?.battery ?? {};
+          const cloudDevices = cloud.devices && typeof cloud.devices === "object" ? cloud.devices : {};
+          const history = mergeSamples(cloud.history, payloadSamples);
+          const devices = { ...cloudDevices, [device.id]: deviceEntry };
+          transaction.set(
+            userRef,
+            { battery: { updatedAt: serverTimestamp(), history, devices } },
+            { merge: true },
+          );
+          return { history, devices };
+        });
+
+        devicesRef.current = result.devices;
+        setCloudDevices(result.devices);
+        if (!sameSamples(samplesRef.current, result.history)) {
+          samplesRef.current = result.history;
+          setSamples(result.history);
+        }
         setLastSync(Date.now());
         setSyncError("");
         setSyncState("synced");
@@ -117,9 +136,12 @@ export function useBatteryHistory({ user, device }) {
 
   writerRef.current = writeCloud;
 
-  // Al entrar con Google: fusionar lo local con lo guardado en la cuenta.
+  // Al entrar con Google: escucha el documento de la cuenta para que los
+  // equipos y lecturas de otros navegadores aparezcan sin recargar.
   useEffect(() => {
     if (!user) {
+      initializedRef.current = false;
+      devicesRef.current = {};
       setCloudDevices({});
       setSyncState("local");
       setSyncError("");
@@ -127,34 +149,58 @@ export function useBatteryHistory({ user, device }) {
       return undefined;
     }
 
-    let cancelled = false;
+    initializedRef.current = false;
+    lastSyncRef.current = 0;
     setSyncState("syncing");
     setSyncError("");
 
-    (async () => {
-      try {
-        const snapshot = await getDoc(doc(db, "users", user.uid));
-        if (cancelled) return;
+    const unsubscribe = onSnapshot(
+      doc(db, "users", user.uid),
+      (snapshot) => {
         const cloud = snapshot.data()?.battery ?? {};
-        const merged = mergeSamples(samplesRef.current, cloud.history);
-        const devices = cloud.devices && typeof cloud.devices === "object" ? cloud.devices : {};
-        devicesRef.current = devices;
-        setCloudDevices(devices);
-        samplesRef.current = merged;
-        setSamples(merged);
-        lastSyncRef.current = 0;
-        await writerRef.current(merged, true);
-      } catch (error) {
-        if (!cancelled) {
-          setSyncState("error");
-          setSyncError(error?.message ?? "No se pudo leer el historial de tu cuenta.");
-        }
-      }
-    })();
+        const cloudDevices = cloud.devices && typeof cloud.devices === "object" ? cloud.devices : {};
+        const remoteHistory = normalize(cloud.history);
 
-    return () => {
-      cancelled = true;
-    };
+        devicesRef.current = cloudDevices;
+        setCloudDevices(cloudDevices);
+
+        if (remoteHistory.length > 0) {
+          const merged = mergeSamples(samplesRef.current, remoteHistory);
+          if (!sameSamples(samplesRef.current, merged)) {
+            samplesRef.current = merged;
+            setSamples(merged);
+          }
+        }
+
+        if (snapshot.metadata.hasPendingWrites) {
+          setSyncState("syncing");
+          return;
+        }
+
+        if (!initializedRef.current) {
+          initializedRef.current = true;
+          lastSyncRef.current = 0;
+          writerRef.current?.(samplesRef.current, true);
+          return;
+        }
+
+        setSyncState("synced");
+        setLastSync(Date.now());
+      },
+      (error) => {
+        setSyncState("error");
+        setSyncError(error?.message ?? "No se pudo leer el historial de tu cuenta.");
+      },
+    );
+
+    return unsubscribe;
+  }, [user?.uid]);
+
+  // Latido: el equipo sigue visible aunque su navegador no exponga batería.
+  useEffect(() => {
+    if (!user) return undefined;
+    const timer = setInterval(() => writerRef.current?.(samplesRef.current, true), HEARTBEAT_INTERVAL);
+    return () => clearInterval(timer);
   }, [user?.uid]);
 
   // Guardado periódico mientras haya muestras nuevas.

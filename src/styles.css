@@ -1010,6 +1010,11 @@ code {
   text-transform: uppercase;
 }
 
+.tag--live {
+  background: rgba(94, 242, 160, 0.14);
+  color: var(--good);
+}
+
 .mini-battery {
   position: relative;
   display: inline-block;
@@ -1809,10 +1814,11 @@ code {
   }
 
   .device-row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 9px 8px;
   }
 
-  .device-row__meta {
+  .device-row__meta span:last-child {
     display: none;
   }
 }

@@ -101,10 +101,19 @@ export function HistoryView({
   mobile = false,
 }) {
   const [range, setRange] = useState("7d");
-  const options = useMemo(
-    () => (mobile ? devices.filter((entry) => isComputer(entry)) : devices),
-    [devices, mobile],
-  );
+  const options = useMemo(() => {
+    if (!mobile) return devices;
+    const computers = devices.filter((entry) => isComputer(entry));
+    // En el teléfono solo se listan computadoras, salvo este equipo cuando
+    // tiene lecturas manuales: así se puede revisar su propio historial.
+    const self = devices.find(
+      (entry) =>
+        entry.current &&
+        entry.source === "manual" &&
+        samples.some((sample) => sample.deviceId === entry.id),
+    );
+    return self && !computers.some((entry) => entry.id === self.id) ? [...computers, self] : computers;
+  }, [devices, samples, mobile]);
   const [selectedDevice, setSelectedDevice] = useState(() => (mobile ? options[0]?.id ?? "" : device.id));
 
   useEffect(() => {
@@ -190,7 +199,7 @@ export function HistoryView({
           <SectionTitle
             icon={HistoryIcon}
             title="Evolución de tu batería"
-            subtitle={`${selectedAlias ?? (mobile ? "Sin computadoras conectadas" : device.alias)} · muestras reales del navegador.`}
+            subtitle={`${selectedAlias ?? (mobile ? "Sin computadoras conectadas" : device.alias)} · muestras reales guardadas.`}
           />
           <div className="segmented">
             <button className={range === "24h" ? "segmented__item segmented__item--active" : "segmented__item"} onClick={() => setRange("24h")}>
@@ -279,7 +288,10 @@ export function HistoryView({
               {recent.map((sample) => (
                 <div className="reading-row" key={`${sample.deviceId}-${sample.t}`}>
                   <span className="reading-row__time">{clockTime(sample.t)}</span>
-                  <span className="reading-row__date">{dayLabel(sample.t)}</span>
+                  <span className="reading-row__date">
+                    {dayLabel(sample.t)}
+                    {sample.source === "manual" ? " · manual" : ""}
+                  </span>
                   <Badge tone={sample.charging ? "good" : "neutral"}>{sample.charging ? "Cargando" : "Batería"}</Badge>
                   <strong className="reading-row__level">{sample.level} %</strong>
                 </div>

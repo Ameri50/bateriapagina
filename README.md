@@ -7,6 +7,7 @@ La pantalla replica el tablero de la app nativa BatteryLink (anillo de nivel, es
 ## Qué incluye
 
 - **Batería en vivo**: nivel, estado de carga, tiempo para completar y autonomía estimada desde `navigator.getBattery()`. Si el navegador no expone la batería, se muestra un aviso y no se inventan datos.
+- **Batería del iPhone y de otros teléfonos**: Android con Chrome la reporta solo; iPhone/iPad no la exponen a ninguna web, así que Inicio muestra la tarjeta **Batería de este iPhone** para registrar a mano el nivel y si está cargando. La lectura se guarda como `source: "manual"`, aparece en «Tus baterías» y en el historial de la cuenta, y dispara la alarma si es 100 % conectado.
 - **Historial real por equipo**: una muestra por minuto mientras la página está abierta (máximo 720). Se guarda en `localStorage` y, con sesión, se sincroniza en tu cuenta.
 - **Alarma de batería llena**: aviso visible, tono corto y notificación del sistema (si se concede permiso) cuando la batería llega al 100 %. Se puede activar, silenciar o probar desde Ajustes.
 - **Historial de recargas**: sesiones enchufadas detectadas en las muestras, con hora, duración, nivel inicial y final, y si quedó completa o parcial.
@@ -17,7 +18,7 @@ La pantalla replica el tablero de la app nativa BatteryLink (anillo de nivel, es
 - **Personalización**: saludo con tu nombre y foto de Google, nombre editable del equipo, color de acento y hasta 6 temas; cada navegador recuerda sus preferencias.
 - **Varios equipos a la vez**: el documento del usuario guarda el historial y la ficha de cada dispositivo que entra con la cuenta. La lista «Tus baterías» se actualiza en vivo (nivel, estado, conexión, ubicación y última lectura de cada equipo) y el historial se puede filtrar por equipo.
 - **Vistas**:
-  - **Inicio**: anillo de batería, especificaciones del navegador, lista de baterías con su ubicación si la compartieron, tendencia de 7 días y recomendaciones.
+  - **Inicio**: anillo de batería (o la última lectura manual del teléfono), especificaciones del navegador, lista de baterías con su ubicación si la compartieron, tendencia de 7 días y recomendaciones.
   - **Historial**: estadísticas de la semana, gráfica de 24 h o 7 días, historial de recargas, resumen por día y últimas lecturas.
   - **Ajustes**: cuenta, nombre del equipo, color, apariencia, alarma, ubicación, exportar JSON y borrar historial con confirmación.
 - **Datos honestos**: salud, ciclos y temperatura aparecen como no disponibles porque la web no puede leerlos; solo la app nativa BatteryLink consulta el controlador real.
@@ -60,28 +61,28 @@ users/{uid}
   battery:
     updatedAt: timestamp
     history: [
-      { t: 1763681200000, level: 99, charging: false, deviceId: "..." }
+      { t: 1763681200000, level: 99, charging: false, deviceId: "...", source: "sensor" | "manual" }
     ]
     devices:
       "<deviceId>": {
         alias, model, platform, browser, cores, memoryGB, screen,
-        level, charging, updatedAt,
+        level, charging, source, updatedAt,
         location: { lat, lng, accuracy, updatedAt } | null
       }
 ```
 
 El historial se escribe con transacciones que fusionan lo que haya guardado otro equipo (nadie borra las baterías del otro), se escucha con `onSnapshot` para que los equipos aparezcan sin recargar, y se conserva en `localStorage` como respaldo. Cada equipo registra un latido cada 5 minutos y sincroniza cada 90 segundos, al ocultar la pestaña, al cambiar el nombre del equipo y con el botón **Sincronizar ahora**.
 
-> iOS no permite leer la batería desde una página web (Safari, Chrome y Firefox usan WebKit). El iPhone aparece en «Tus baterías», pero su nivel solo puede reportarlo la app nativa BatteryLink.
+> iOS no permite leer la batería desde una página web (Safari, Chrome y Firefox usan WebKit). El iPhone aparece en «Tus baterías» y su nivel se puede registrar a mano desde la tarjeta **Batería de este iPhone** en Inicio; queda marcado como lectura manual.
 
 > Esta versión no modifica ni despliega reglas de Firestore. Solo lee y escribe el documento del usuario autenticado.
 
 ## Limitaciones conocidas
 
-- **Chrome y Edge en escritorio** exponen `navigator.getBattery()`. **Safari en iPhone/iPad y Firefox no**, por lo que la sección de batería aparece como no disponible; el historial ya guardado sigue visible.
+- **Chrome y Edge en escritorio** y **Chrome en Android** exponen `navigator.getBattery()`. **Safari en iPhone/iPad y Firefox no**, por lo que en esos equipos la lectura es manual (o inexistente); el historial ya guardado sigue visible.
 - La web no puede leer salud de la batería, ciclos ni temperatura.
-- El historial crece solo mientras la página está abierta; no hay servicio en segundo plano. Para lectura continua existe la app nativa.
-- **La alarma solo suena mientras la página está abierta.** Las notificaciones del sistema requieren permiso y un navegador compatible; en iOS el aviso dentro de la página sigue funcionando, pero su batería no puede leerse desde la web.
+- El historial crece solo mientras la página está abierta; no hay servicio en segundo plano. Las lecturas manuales del iPhone son puntuales: solo se guardan cuando pulsas **Guardar lectura**.
+- **La alarma solo suena mientras la página está abierta.** Las notificaciones del sistema requieren permiso y un navegador compatible; en iOS el aviso dentro de la página sigue funcionando y la alarma también se evalúa al guardar una lectura manual al 100 %.
 - **La ubicación es opcional y aproximada.** Necesita HTTPS (o localhost) y permiso explícito; se guarda la última posición compartida, no un seguimiento continuo. Se muestra como coordenadas con enlace a OpenStreetMap, sin geocodificación inversa ni servicios de mapas de terceros.
 - Las muestras se limitan a 720 por navegador para no exceder el tamaño del documento.
 
@@ -97,7 +98,7 @@ src/
     useBatteryHistory.js  localStorage + sincronización con Firestore
     useChargeAlarm.js     alarma al 100 % (aviso, sonido y notificación)
     useDeviceLocation.js  ubicación opcional del equipo
-  components/             Dashboard, HistoryView, SettingsView, BatteryTips, gráficas y UI
+  components/             Dashboard, HistoryView, SettingsView, ReportBattery, BatteryTips, gráficas y UI
   lib/                    formato, dispositivo, tema, alarma y sesiones de recarga
 ```
 

@@ -26,35 +26,42 @@ export function useChargeAlarm({ level, charging, device }) {
   const deviceAliasRef = useRef(device.alias);
   deviceAliasRef.current = device.alias;
 
-  useEffect(() => {
-    if (!settings.enabled) return;
-    if (level == null || charging == null) return;
+  const check = useCallback(
+    (nextLevel, nextCharging) => {
+      if (!settings.enabled) return;
+      if (nextLevel == null || nextCharging == null) return;
 
-    if (!charging || level < 100) {
-      if (level <= REARM_LEVEL) armedRef.current = true;
-      return;
-    }
-    if (!armedRef.current) return;
+      if (!nextCharging || nextLevel < 100) {
+        if (nextLevel <= REARM_LEVEL) armedRef.current = true;
+        return;
+      }
+      if (!armedRef.current) return;
 
-    const now = Date.now();
-    if (now - lastRef.current < COOLDOWN) {
+      const now = Date.now();
+      if (now - lastRef.current < COOLDOWN) {
+        armedRef.current = false;
+        return;
+      }
+
       armedRef.current = false;
-      return;
-    }
+      lastRef.current = now;
+      saveLastAlarm(device.id, now);
+      setAlert({ at: now, alias: deviceAliasRef.current });
 
-    armedRef.current = false;
-    lastRef.current = now;
-    saveLastAlarm(device.id, now);
-    setAlert({ at: now, alias: deviceAliasRef.current });
+      if (settings.sound) playChime();
+      if (settings.notifications) {
+        showSystemNotification(
+          "Batería al 100 %",
+          `${deviceAliasRef.current} completó la carga. Desenchúfala para cuidar la batería.`,
+        );
+      }
+    },
+    [settings.enabled, settings.sound, settings.notifications, device.id],
+  );
 
-    if (settings.sound) playChime();
-    if (settings.notifications) {
-      showSystemNotification(
-        "Batería al 100 %",
-        `${deviceAliasRef.current} completó la carga. Desenchúfala para cuidar la batería.`,
-      );
-    }
-  }, [level, charging, settings.enabled, settings.sound, settings.notifications, device.id]);
+  useEffect(() => {
+    check(level, charging);
+  }, [check, level, charging]);
 
   const update = useCallback((patch) => {
     setSettings((current) => ({ ...current, ...patch }));
@@ -73,5 +80,5 @@ export function useChargeAlarm({ level, charging, device }) {
 
   const dismiss = useCallback(() => setAlert(null), []);
 
-  return { settings, update, alert, dismiss, enableNotifications, test };
+  return { settings, update, alert, dismiss, enableNotifications, test, check };
 }

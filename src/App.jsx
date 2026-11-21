@@ -100,11 +100,16 @@ export default function App() {
     setAlias(next);
   };
 
+  const handleReportBattery = async (payload) => {
+    await history.reportManual(payload);
+    alarm.check(payload.level, payload.charging);
+  };
+
   const meta = PAGE_META[view];
   const mobileHome = view === "inicio" && isMobile;
-  const title = mobileHome ? "Baterías de tus computadoras" : meta.title(auth.user);
+  const title = mobileHome ? "Tus baterías" : meta.title(auth.user);
   const subtitle = mobileHome
-    ? "Nivel real de cada computadora conectada con tu cuenta de Google."
+    ? "Registra la de este teléfono y consulta las computadoras conectadas con tu cuenta."
     : meta.subtitle;
 
   const headerBadges = isMobile ? (
@@ -210,6 +215,7 @@ export default function App() {
               devices={history.devices}
               syncState={history.syncState}
               syncNow={history.syncNow}
+              onReportBattery={handleReportBattery}
               onSignIn={auth.signIn}
               onNavigate={setView}
               authBusy={auth.busy}

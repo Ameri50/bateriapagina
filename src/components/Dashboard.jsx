@@ -22,12 +22,12 @@ import {
 } from "lucide-react";
 import { BatteryRing } from "./BatteryRing";
 import { BatteryTips } from "./BatteryTips";
+import { ReportBattery } from "./ReportBattery";
 import { TrendChart, summarize } from "./TrendChart";
 import {
   ActionButton,
   Badge,
   GlassCard,
-  InfoBanner,
   KeyValue,
   MiniBattery,
   SectionTitle,
@@ -113,6 +113,7 @@ function DeviceRow({ entry, now }) {
           {entry.alias || entry.model || "Dispositivo"}
           {entry.current ? <span className="tag">Este</span> : null}
           {!entry.current && online ? <span className="tag tag--live">En vivo</span> : null}
+          {entry.source === "manual" ? <span className="tag tag--manual">Manual</span> : null}
         </strong>
         <span>{[entry.model, entry.browser].filter(Boolean).join(" · ") || entry.platform || "Sin datos"}</span>
         <LocationLine location={entry.location} now={now} />
@@ -135,6 +136,7 @@ export function Dashboard({
   devices,
   syncState,
   syncNow,
+  onReportBattery,
   onSignIn,
   onNavigate,
   authBusy,
@@ -145,6 +147,7 @@ export function Dashboard({
     () => samples.filter((sample) => sample.deviceId === device.id),
     [samples, device.id],
   );
+  const lastDeviceSample = deviceSamples[deviceSamples.length - 1];
   const computers = useMemo(() => devices.filter((entry) => isComputer(entry)), [devices]);
   const featured = computers[0];
   const featuredSamples = useMemo(
@@ -153,10 +156,32 @@ export function Dashboard({
   );
   const summary = summarize(deviceSamples);
   const label = chargingLabel(battery.charging, battery.level, battery.supported);
+  const manual = battery.supported === false && lastDeviceSample?.source === "manual" ? lastDeviceSample : null;
+  const displayLevel = manual ? manual.level : battery.level;
+  const displayCharging = manual ? Boolean(manual.charging) : battery.charging;
+  const displayLabel = manual
+    ? manual.charging
+      ? manual.level >= 100
+        ? "Completa"
+        : "Cargando"
+      : "Descargando"
+    : label;
+  const displayUpdatedAt = manual ? manual.t : battery.updatedAt;
 
   if (mobile) {
     return (
       <>
+        {battery.supported === false ? (
+          <ReportBattery
+            device={device}
+            lastSample={lastDeviceSample}
+            onReport={onReportBattery}
+            user={user}
+            now={now}
+            mobile
+          />
+        ) : null}
+
         <GlassCard>
           <SectionTitle
             icon={Laptop}
@@ -234,14 +259,18 @@ export function Dashboard({
         <Badge tone="good" icon={Activity}>
           En vivo
         </Badge>
+      ) : manual ? (
+        <Badge tone="blue" icon={Smartphone}>
+          Lectura manual
+        </Badge>
       ) : (
         <Badge tone="warn" icon={BatteryLow}>
           Batería no expuesta
         </Badge>
       )}
-      {battery.supported && battery.charging != null ? (
-        <Badge tone={battery.charging ? "good" : "neutral"} icon={battery.charging ? Zap : BatteryMedium}>
-          {battery.charging ? "Enchufado" : "Con batería"}
+      {(battery.supported || manual) && displayCharging != null ? (
+        <Badge tone={displayCharging ? "good" : "neutral"} icon={displayCharging ? Zap : BatteryMedium}>
+          {displayCharging ? "Enchufado" : "Con batería"}
         </Badge>
       ) : null}
       {user ? (
@@ -256,13 +285,17 @@ export function Dashboard({
     <>
       <GlassCard className="hero">
         <div className="hero__ring">
-          <BatteryRing level={battery.level} charging={battery.charging} supported={battery.supported} />
+          <BatteryRing
+            level={displayLevel}
+            charging={displayCharging}
+            supported={battery.supported || Boolean(manual)}
+          />
         </div>
         <div className="hero__info">
           <div className="hero__head">
             <div>
-              <span className="eyebrow">Nivel de batería</span>
-              <h2>{label}</h2>
+              <span className="eyebrow">{manual ? "Nivel reportado" : "Nivel de batería"}</span>
+              <h2>{displayLabel}</h2>
             </div>
             <div className="hero__badges">{badges}</div>
           </div>
@@ -271,18 +304,24 @@ export function Dashboard({
             <KeyValue label="Dispositivo" value={device.alias} hint={`${device.model} · ${device.browser}`} />
             <KeyValue
               label="Para completar"
-              value={battery.charging ? duration(battery.chargingTime) : "—"}
-              hint={battery.charging ? "Estimación del navegador" : "Solo al cargar"}
+              value={manual ? "—" : battery.charging ? duration(battery.chargingTime) : "—"}
+              hint={manual ? "Solo si el navegador la mide" : battery.charging ? "Estimación del navegador" : "Solo al cargar"}
             />
             <KeyValue
               label="Autonomía estimada"
-              value={!battery.charging ? duration(battery.dischargingTime) : "—"}
-              hint={!battery.charging ? "Estimación del navegador" : "Solo al descargar"}
+              value={manual ? "—" : !battery.charging ? duration(battery.dischargingTime) : "—"}
+              hint={
+                manual
+                  ? "Solo si el navegador la mide"
+                  : !battery.charging
+                    ? "Estimación del navegador"
+                    : "Solo al descargar"
+              }
             />
             <KeyValue
               label="Última lectura"
-              value={relativeTime(battery.updatedAt, now)}
-              hint={battery.updatedAt ? clockTime(battery.updatedAt) : "Sin datos"}
+              value={relativeTime(displayUpdatedAt, now)}
+              hint={displayUpdatedAt ? clockTime(displayUpdatedAt) : "Sin datos"}
             />
           </div>
 
@@ -297,28 +336,14 @@ export function Dashboard({
         </div>
       </GlassCard>
 
-      {!battery.supported ? (
-        <InfoBanner
-          icon={BatteryLow}
-          title={
-            device.platform === "iPhone" || device.platform === "iPad"
-              ? `Este ${device.platform} no expone la batería a la web`
-              : "Este navegador no expone la batería"
-          }
-          tone="warn"
-        >
-          {device.platform === "iPhone" || device.platform === "iPad" ? (
-            <>
-              Safari, Chrome y Firefox en iOS usan WebKit y no permiten leerla desde una página. El equipo queda
-              registrado en «Tus baterías», pero su nivel solo puede leerlo la app nativa BatteryLink.
-            </>
-          ) : (
-            <>
-              Safari y Firefox no exponen la batería a las webs. En este equipo usa Chrome o Edge para verla aquí, o la
-              app BatteryLink, que la lee del sistema. El historial ya guardado seguirá visible.
-            </>
-          )}
-        </InfoBanner>
+      {battery.supported === false ? (
+        <ReportBattery
+          device={device}
+          lastSample={lastDeviceSample}
+          onReport={onReportBattery}
+          user={user}
+          now={now}
+        />
       ) : null}
 
       <div className="grid grid-3">

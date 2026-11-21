@@ -37,6 +37,7 @@ function mergeSamples(first, second) {
       level,
       charging: Boolean(entry.charging),
       deviceId,
+      source: entry.source === "manual" ? "manual" : "sensor",
     });
   });
   return [...map.values()].sort((a, b) => a.t - b.t).slice(-MAX_SAMPLES);
@@ -47,7 +48,13 @@ function sameSamples(first, second) {
   if (first.length === 0) return true;
   const a = first[first.length - 1];
   const b = second[second.length - 1];
-  return a.t === b.t && a.level === b.level && a.charging === b.charging && a.deviceId === b.deviceId;
+  return (
+    a.t === b.t &&
+    a.level === b.level &&
+    a.charging === b.charging &&
+    a.deviceId === b.deviceId &&
+    a.source === b.source
+  );
 }
 
 export function useBatteryHistory({ user, device }) {
@@ -97,6 +104,7 @@ export function useBatteryHistory({ user, device }) {
         location: device.location ?? null,
         level: latest?.level ?? devicesRef.current[device.id]?.level ?? null,
         charging: latest?.charging ?? devicesRef.current[device.id]?.charging ?? null,
+        source: latest?.source ?? devicesRef.current[device.id]?.source ?? null,
         updatedAt: latest?.t ?? Date.now(),
       };
 
@@ -232,18 +240,39 @@ export function useBatteryHistory({ user, device }) {
   }, [user, device.alias]);
 
   const addSample = useCallback((sample) => {
+    const normalized = { ...sample, source: sample.source === "manual" ? "manual" : "sensor" };
     setSamples((current) => {
       const last = current[current.length - 1];
       const duplicate =
         last &&
-        last.deviceId === sample.deviceId &&
-        last.level === sample.level &&
-        last.charging === sample.charging &&
-        Math.abs(sample.t - last.t) < 20_000;
+        last.deviceId === normalized.deviceId &&
+        last.level === normalized.level &&
+        last.charging === normalized.charging &&
+        Math.abs(normalized.t - last.t) < 20_000;
       if (duplicate) return current;
-      return [...current, sample].slice(-MAX_SAMPLES);
+      return [...current, normalized].slice(-MAX_SAMPLES);
     });
   }, []);
+
+  // Lectura escrita a mano en equipos donde la web no puede leer la batería
+  // (iPhone, iPad, Safari). Se guarda y se sincroniza como cualquier muestra.
+  const reportManual = useCallback(
+    async ({ level, charging }) => {
+      const sample = {
+        t: Date.now(),
+        level: Math.max(0, Math.min(100, Math.round(Number(level)))),
+        charging: Boolean(charging),
+        deviceId: device.id,
+        source: "manual",
+      };
+      const next = mergeSamples(samplesRef.current, [sample]);
+      samplesRef.current = next;
+      setSamples(next);
+      await writerRef.current?.(next, true);
+      return sample;
+    },
+    [device.id],
+  );
 
   const syncNow = useCallback(() => writerRef.current(samplesRef.current, true), []);
 
@@ -281,6 +310,7 @@ export function useBatteryHistory({ user, device }) {
       location: device.location ?? map[device.id]?.location ?? null,
       level: last?.level ?? map[device.id]?.level ?? null,
       charging: last?.charging ?? map[device.id]?.charging ?? null,
+      source: last?.source ?? map[device.id]?.source ?? null,
       updatedAt: last?.t ?? map[device.id]?.updatedAt ?? null,
       current: true,
     };
@@ -296,6 +326,7 @@ export function useBatteryHistory({ user, device }) {
     syncError,
     lastSync,
     addSample,
+    reportManual,
     clearHistory,
     syncNow,
   };

@@ -79,3 +79,8 @@ export function loadDevice() {
 export function saveAlias(alias) {
   localStorage.setItem(ALIAS_KEY, alias);
 }
+
+export function mapUrl(location) {
+  if (!location) return "";
+  return `https://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lng}#map=16/${location.lat}/${location.lng}`;
+}

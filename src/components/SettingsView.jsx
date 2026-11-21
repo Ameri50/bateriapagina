@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Bell,
+  BellRing,
   Check,
   Cloud,
   CloudOff,
@@ -10,16 +12,23 @@ import {
   Link2,
   LogIn,
   LogOut,
+  MapPin,
+  Moon,
+  Navigation,
   Palette,
   PencilLine,
   ShieldCheck,
+  Sun,
   Trash2,
   TriangleAlert,
   UserRound,
+  Volume2,
 } from "lucide-react";
-import { ActionButton, Avatar, Badge, GlassCard, KeyValue, SectionTitle } from "./ui";
+import { ActionButton, Avatar, Badge, GlassCard, InfoBanner, KeyValue, SectionTitle, Toggle } from "./ui";
 import { GoogleMark } from "./Layout";
 import { ACCENTS } from "../lib/theme";
+import { notificationPermission } from "../lib/alarm";
+import { mapUrl } from "../lib/device";
 import { compactNumber, firstName, relativeTime } from "../lib/format";
 
 function syncLabel(syncState) {
@@ -69,10 +78,23 @@ export function SettingsView({
   onClearHistory,
   authBusy,
   now,
+  theme,
+  onThemeChange,
+  alarm,
+  onAlarmChange,
+  onEnableNotifications,
+  onTestAlarm,
+  location,
+  locationStatus,
+  locationError,
+  onRequestLocation,
+  onClearLocation,
 }) {
   const [aliasDraft, setAliasDraft] = useState(device.alias);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [permissionNote, setPermissionNote] = useState("");
+  const permission = notificationPermission();
 
   useEffect(() => {
     setAliasDraft(device.alias);
@@ -89,6 +111,14 @@ export function SettingsView({
     event.preventDefault();
     if (trimmedAlias.length === 0 || trimmedAlias === device.alias) return;
     onSaveAlias(trimmedAlias);
+  };
+
+  const handleEnableNotifications = async () => {
+    const result = await onEnableNotifications();
+    if (result === "granted") setPermissionNote("Notificaciones activadas en este navegador.");
+    else if (result === "denied") setPermissionNote("El navegador bloqueó las notificaciones. Habilítalas en los ajustes del sitio.");
+    else if (result === "unsupported") setPermissionNote("Este navegador no admite notificaciones web (iOS necesita la app instalada).");
+    else setPermissionNote("No se pudo pedir el permiso en este momento.");
   };
 
   const handleClear = async () => {
@@ -220,6 +250,165 @@ export function SettingsView({
           </div>
           <p className="settings-note">
             <Palette size={13} /> Preferencia local de este navegador; no se comparte con tu cuenta.
+          </p>
+        </GlassCard>
+
+        <GlassCard className="settings-card">
+          <SectionTitle
+            icon={Sun}
+            title="Apariencia"
+            subtitle="Modo claro para el día o modo oscuro para poca luz."
+          />
+          <div className="theme-options" role="radiogroup" aria-label="Tema de la página">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={theme === "light"}
+              className={`theme-option ${theme === "light" ? "theme-option--active" : ""}`}
+              onClick={() => onThemeChange("light")}
+            >
+              <Sun size={18} strokeWidth={2.1} />
+              <span>Claro</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={theme === "dark"}
+              className={`theme-option ${theme === "dark" ? "theme-option--active" : ""}`}
+              onClick={() => onThemeChange("dark")}
+            >
+              <Moon size={18} strokeWidth={2.1} />
+              <span>Oscuro</span>
+            </button>
+          </div>
+          <p className="settings-note">
+            <Sun size={13} /> Se guarda en este navegador; no se comparte con tu cuenta.
+          </p>
+        </GlassCard>
+
+        <GlassCard className="settings-card">
+          <SectionTitle
+            icon={BellRing}
+            title="Alarma al 100 %"
+            subtitle="Aviso visible y sonido cuando una batería completa la carga."
+          />
+          <div className="toggle-row">
+            <div>
+              <strong>Activar alarma</strong>
+              <span>Muestra un aviso en la página al llegar al 100 %.</span>
+            </div>
+            <Toggle
+              checked={alarm.enabled}
+              onChange={(value) => onAlarmChange({ enabled: value })}
+              label="Activar alarma"
+            />
+          </div>
+          <div className="toggle-row">
+            <div>
+              <strong>Sonido</strong>
+              <span>Un tono corto al completar la carga.</span>
+            </div>
+            <Toggle
+              checked={alarm.sound}
+              onChange={(value) => onAlarmChange({ sound: value })}
+              label="Sonido de la alarma"
+              disabled={!alarm.enabled}
+            />
+          </div>
+          <div className="toggle-row">
+            <div>
+              <strong>Notificaciones del sistema</strong>
+              <span>
+                {permission === "granted"
+                  ? "El navegador ya permite avisos de BatteryLink."
+                  : permission === "denied"
+                    ? "Bloqueadas en este navegador; puedes habilitarlas en los ajustes del sitio."
+                    : "Pide permiso para que el aviso aparezca fuera de la pestaña."}
+              </span>
+            </div>
+            {permission === "granted" ? (
+              <Badge tone="good" icon={Bell}>
+                Permitidas
+              </Badge>
+            ) : (
+              <ActionButton
+                variant="ghost"
+                icon={Bell}
+                onClick={handleEnableNotifications}
+                disabled={!alarm.enabled}
+              >
+                Permitir
+              </ActionButton>
+            )}
+          </div>
+          {permissionNote ? <p className="settings-note">{permissionNote}</p> : null}
+          <div className="settings-actions">
+            <ActionButton variant="ghost" icon={Volume2} onClick={onTestAlarm}>
+              Probar alarma
+            </ActionButton>
+          </div>
+          <p className="settings-note">
+            <BellRing size={13} /> Solo funciona mientras la página está abierta. El iPhone no expone su batería a la web.
+          </p>
+        </GlassCard>
+
+        <GlassCard className="settings-card">
+          <SectionTitle
+            icon={MapPin}
+            title="Ubicación de este equipo"
+            subtitle="Opcional: compártela para ver dónde está cada equipo de tu cuenta."
+          />
+          {location ? (
+            <>
+              <div className="location-preview">
+                <span className="location-preview__pin">
+                  <MapPin size={18} strokeWidth={2.1} />
+                </span>
+                <div>
+                  <strong>
+                    {location.lat}, {location.lng}
+                  </strong>
+                  <span>
+                    {[
+                      location.accuracy ? `Precisión ≈ ${Math.round(location.accuracy)} m` : "",
+                      location.updatedAt ? relativeTime(location.updatedAt, now) : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+              </div>
+              <a className="link-button" href={mapUrl(location)} target="_blank" rel="noreferrer">
+                <MapPin size={13} /> Ver en el mapa (OpenStreetMap)
+              </a>
+            </>
+          ) : (
+            <p className="muted-text">
+              Todavía no compartes la ubicación de este equipo. El navegador pedirá permiso solo cuando pulses el botón.
+            </p>
+          )}
+          {locationError ? (
+            <InfoBanner icon={TriangleAlert} title="No se pudo obtener la ubicación" tone="warn">
+              {locationError}
+            </InfoBanner>
+          ) : null}
+          <div className="settings-actions">
+            <ActionButton icon={Navigation} onClick={onRequestLocation} disabled={locationStatus === "locating"}>
+              {locationStatus === "locating"
+                ? "Obteniendo…"
+                : location
+                  ? "Actualizar ubicación"
+                  : "Compartir ubicación"}
+            </ActionButton>
+            {location ? (
+              <ActionButton variant="ghost" icon={Trash2} onClick={onClearLocation}>
+                Quitar
+              </ActionButton>
+            ) : null}
+          </div>
+          <p className="settings-note">
+            <ShieldCheck size={13} /> Es una ubicación aproximada del navegador. Se guarda solo cuando la compartes y no se
+            actualiza en segundo plano.
           </p>
         </GlassCard>
 

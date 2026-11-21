@@ -1,11 +1,13 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { Cloud, CloudOff, RefreshCw, TriangleAlert } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { BellRing, Cloud, CloudOff, RefreshCw, TriangleAlert } from "lucide-react";
 import { useAuth } from "./hooks/useAuth";
 import { useBattery } from "./hooks/useBattery";
 import { useBatteryHistory } from "./hooks/useBatteryHistory";
+import { useChargeAlarm } from "./hooks/useChargeAlarm";
+import { useDeviceLocation } from "./hooks/useDeviceLocation";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { loadDevice, saveAlias } from "./lib/device";
-import { applyAccent, loadAccent } from "./lib/theme";
+import { applyAccent, applyTheme, loadAccent, loadTheme } from "./lib/theme";
 import { firstName, todayLabel } from "./lib/format";
 import { DeviceChip, MobileBrand, MobileNav, PageHeader, Sidebar } from "./components/Layout";
 import { Dashboard } from "./components/Dashboard";
@@ -36,20 +38,37 @@ export default function App() {
   const [baseDevice] = useState(loadDevice);
   const [alias, setAlias] = useState(baseDevice.alias);
   const [accent, setAccent] = useState(loadAccent);
+  const [theme, setTheme] = useState(loadTheme);
   const [view, setView] = useState("inicio");
   const [now, setNow] = useState(() => Date.now());
   const isMobile = useIsMobile();
 
   const auth = useAuth();
   const battery = useBattery();
-  const device = useMemo(() => ({ ...baseDevice, alias }), [baseDevice, alias]);
+  const deviceLocation = useDeviceLocation();
+  const device = useMemo(
+    () => ({ ...baseDevice, alias, location: deviceLocation.location }),
+    [baseDevice, alias, deviceLocation.location],
+  );
   const history = useBatteryHistory({ user: auth.user, device });
+  const alarm = useChargeAlarm({ level: battery.level, charging: battery.charging, device });
 
   const { addSample } = history;
+  const locationSyncRef = useRef(deviceLocation.location);
 
   useLayoutEffect(() => {
     applyAccent(accent);
   }, [accent]);
+
+  useLayoutEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    if (locationSyncRef.current === deviceLocation.location) return;
+    locationSyncRef.current = deviceLocation.location;
+    history.syncNow();
+  }, [deviceLocation.location, history.syncNow]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000);
@@ -122,10 +141,17 @@ export default function App() {
         syncState={history.syncState}
         onSignIn={auth.signIn}
         busy={auth.busy}
+        theme={theme}
+        onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
       />
 
       <div className="app-main">
-        <MobileBrand user={auth.user} onSignIn={auth.signIn} />
+        <MobileBrand
+          user={auth.user}
+          onSignIn={auth.signIn}
+          theme={theme}
+          onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+        />
 
         <main className="content">
           <PageHeader
@@ -152,6 +178,25 @@ export default function App() {
               {auth.error}{" "}
               <button className="link-inline" onClick={auth.clearError}>
                 Descartar
+              </button>
+            </InfoBanner>
+          ) : null}
+
+          {alarm.alert ? (
+            <InfoBanner icon={BellRing} title={`${alarm.alert.alias} llegó al 100 %`} tone="good">
+              Desenchúfala para cuidar la batería.{" "}
+              <button className="link-inline" onClick={alarm.dismiss}>
+                Descartar
+              </button>{" "}
+              ·{" "}
+              <button
+                className="link-inline"
+                onClick={() => {
+                  alarm.dismiss();
+                  setView("ajustes");
+                }}
+              >
+                Configurar alarma
               </button>
             </InfoBanner>
           ) : null}
@@ -206,6 +251,17 @@ export default function App() {
               onClearHistory={history.clearHistory}
               authBusy={auth.busy}
               now={now}
+              theme={theme}
+              onThemeChange={setTheme}
+              alarm={alarm.settings}
+              onAlarmChange={alarm.update}
+              onEnableNotifications={alarm.enableNotifications}
+              onTestAlarm={alarm.test}
+              location={deviceLocation.location}
+              locationStatus={deviceLocation.status}
+              locationError={deviceLocation.error}
+              onRequestLocation={deviceLocation.request}
+              onClearLocation={deviceLocation.clear}
             />
           ) : null}
 

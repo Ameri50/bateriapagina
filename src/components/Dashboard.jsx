@@ -10,6 +10,7 @@ import {
   HardDrive,
   History as HistoryIcon,
   Laptop,
+  MapPin,
   MemoryStick,
   MonitorSmartphone,
   RefreshCw,
@@ -20,6 +21,7 @@ import {
   Zap,
 } from "lucide-react";
 import { BatteryRing } from "./BatteryRing";
+import { BatteryTips } from "./BatteryTips";
 import { TrendChart, summarize } from "./TrendChart";
 import {
   ActionButton,
@@ -32,7 +34,7 @@ import {
 } from "./ui";
 import { GoogleMark } from "./Layout";
 import { clockTime, duration, relativeTime } from "../lib/format";
-import { isComputer } from "../lib/device";
+import { isComputer, mapUrl } from "../lib/device";
 
 function chargingLabel(charging, level, supported) {
   if (!supported) return "No disponible";
@@ -76,6 +78,26 @@ function deviceSnapshot(entry) {
   };
 }
 
+function LocationLine({ location, now }) {
+  const lat = Number(location?.lat);
+  const lng = Number(location?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const accuracy = location.accuracy ? `±${Math.round(location.accuracy)} m` : "";
+  const when = location.updatedAt ? relativeTime(location.updatedAt, now) : "";
+  return (
+    <a
+      className="device-row__place"
+      href={mapUrl({ lat, lng })}
+      target="_blank"
+      rel="noreferrer"
+      title="Abrir la ubicación en el mapa"
+    >
+      <MapPin size={11} strokeWidth={2.2} />
+      {[accuracy, when].filter(Boolean).join(" · ") || "Ver en el mapa"}
+    </a>
+  );
+}
+
 function DeviceRow({ entry, now }) {
   const Icon = deviceIcon(entry);
   const { level, charging, updatedAt } = deviceSnapshot(entry);
@@ -93,6 +115,7 @@ function DeviceRow({ entry, now }) {
           {!entry.current && online ? <span className="tag tag--live">En vivo</span> : null}
         </strong>
         <span>{[entry.model, entry.browser].filter(Boolean).join(" · ") || entry.platform || "Sin datos"}</span>
+        <LocationLine location={entry.location} now={now} />
       </div>
       <MiniBattery level={level} charging={charging} />
       <div className="device-row__meta">
@@ -181,6 +204,8 @@ export function Dashboard({
             )}
           </GlassCard>
         ) : null}
+
+        <BatteryTips />
 
         {!user ? (
           <GlassCard className="signin-card">
@@ -401,6 +426,8 @@ export function Dashboard({
           </div>
         )}
       </GlassCard>
+
+      <BatteryTips highlightFull={battery.charging === true && battery.level >= 100} />
 
       {!user ? (
         <GlassCard className="signin-card">

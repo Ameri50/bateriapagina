@@ -8,6 +8,7 @@ export const ACCENTS = [
 ];
 
 export const ACCENT_KEY = "batterylink.web.accent.v1";
+export const THEME_KEY = "batterylink.web.theme.v1";
 
 export function loadAccent() {
   const stored = localStorage.getItem(ACCENT_KEY);
@@ -17,4 +18,17 @@ export function loadAccent() {
 export function applyAccent(id) {
   document.documentElement.dataset.accent = id;
   localStorage.setItem(ACCENT_KEY, id);
+}
+
+export function loadTheme() {
+  const stored = localStorage.getItem(THEME_KEY);
+  if (stored === "light" || stored === "dark") return stored;
+  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+export function applyTheme(id) {
+  document.documentElement.dataset.theme = id;
+  localStorage.setItem(THEME_KEY, id);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", id === "light" ? "#f4f8f5" : "#070a09");
 }

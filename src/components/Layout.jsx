@@ -1,4 +1,15 @@
-import { BatteryCharging, Cloud, CloudOff, History, Home, LogIn, Settings, Smartphone } from "lucide-react";
+import {
+  BatteryCharging,
+  Cloud,
+  CloudOff,
+  History,
+  Home,
+  LogIn,
+  Moon,
+  Settings,
+  Smartphone,
+  Sun,
+} from "lucide-react";
 import { Avatar } from "./ui";
 import { firstName } from "../lib/format";
 
@@ -37,7 +48,31 @@ function SyncPill({ syncState }) {
   );
 }
 
-export function Sidebar({ view, onNavigate, user, syncState, onSignIn, busy }) {
+export function ThemeButton({ theme, onToggle, compact = false }) {
+  const nextLabel = theme === "dark" ? "claro" : "oscuro";
+  const Icon = theme === "dark" ? Sun : Moon;
+  if (compact) {
+    return (
+      <button
+        type="button"
+        className="icon-button"
+        onClick={onToggle}
+        aria-label={`Activar modo ${nextLabel}`}
+        title={`Modo ${nextLabel}`}
+      >
+        <Icon size={17} strokeWidth={2.1} />
+      </button>
+    );
+  }
+  return (
+    <button type="button" className="theme-toggle" onClick={onToggle} aria-label={`Activar modo ${nextLabel}`}>
+      <Icon size={15} strokeWidth={2.1} />
+      {theme === "dark" ? "Modo claro" : "Modo oscuro"}
+    </button>
+  );
+}
+
+export function Sidebar({ view, onNavigate, user, syncState, onSignIn, busy, theme, onToggleTheme }) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -67,6 +102,7 @@ export function Sidebar({ view, onNavigate, user, syncState, onSignIn, busy }) {
       </nav>
 
       <div className="sidebar__footer">
+        <ThemeButton theme={theme} onToggle={onToggleTheme} />
         <SyncPill syncState={syncState} />
         {user ? (
           <div className="account-mini">
@@ -107,7 +143,7 @@ export function MobileNav({ view, onNavigate }) {
   );
 }
 
-export function MobileBrand({ user, onSignIn }) {
+export function MobileBrand({ user, onSignIn, theme, onToggleTheme }) {
   return (
     <div className="mobile-brand">
       <div className="brand brand--small">
@@ -119,13 +155,16 @@ export function MobileBrand({ user, onSignIn }) {
           <span>Mi batería</span>
         </div>
       </div>
-      {user ? (
-        <Avatar user={user} size={34} />
-      ) : (
-        <button className="icon-button" onClick={onSignIn} aria-label="Entrar con Google">
-          <LogIn size={17} strokeWidth={2.1} />
-        </button>
-      )}
+      <div className="mobile-brand__actions">
+        <ThemeButton theme={theme} onToggle={onToggleTheme} compact />
+        {user ? (
+          <Avatar user={user} size={34} />
+        ) : (
+          <button className="icon-button" onClick={onSignIn} aria-label="Entrar con Google">
+            <LogIn size={17} strokeWidth={2.1} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

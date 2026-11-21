@@ -83,6 +83,22 @@ export function Avatar({ user, size = 40 }) {
   );
 }
 
+export function Toggle({ checked, onChange, label, disabled }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      className={`toggle ${checked ? "toggle--on" : ""}`}
+      onClick={() => onChange(!checked)}
+      disabled={disabled}
+    >
+      <span className="toggle__knob" />
+    </button>
+  );
+}
+
 export function MiniBattery({ level, charging, size = 34 }) {
   const tone = level == null ? "muted" : level <= 15 ? "danger" : level <= 35 ? "warn" : "good";
   return (

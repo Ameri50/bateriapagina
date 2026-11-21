@@ -61,7 +61,7 @@ export function TrendChart({ samples, range = "7d", height = 220 }) {
               <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="rgba(255,255,255,.06)" vertical={false} />
+          <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
           <XAxis
             dataKey="label"
             axisLine={false}
@@ -80,7 +80,7 @@ export function TrendChart({ samples, range = "7d", height = 220 }) {
             tick={{ fill: "var(--muted)", fontSize: 11 }}
             unit="%"
           />
-          <Tooltip content={<TrendTooltip />} cursor={{ stroke: "rgba(255,255,255,.18)", strokeDasharray: "4 4" }} />
+          <Tooltip content={<TrendTooltip />} cursor={{ stroke: "var(--chart-cursor)", strokeDasharray: "4 4" }} />
           <Area
             type="monotone"
             dataKey="value"

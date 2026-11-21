@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Cloud, CloudOff, History as HistoryIcon, CloudUpload, Smartphone } from "lucide-react";
+import { BatteryCharging, Cloud, CloudOff, CloudUpload, History as HistoryIcon, Smartphone } from "lucide-react";
 import { TrendChart, summarize } from "./TrendChart";
 import { ActionButton, Badge, GlassCard, InfoBanner, SectionTitle } from "./ui";
 import { GoogleMark } from "./Layout";
-import { clockTime, dayLabel, relativeTime, startOfDay } from "../lib/format";
+import { clockTime, dayLabel, duration, relativeTime, startOfDay } from "../lib/format";
 import { isComputer } from "../lib/device";
+import { chargeSessions } from "../lib/charging";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -27,6 +28,62 @@ function dailyGroups(samples) {
         charging: Math.round((group.filter((sample) => sample.charging).length / group.length) * 100),
       };
     });
+}
+
+function ChargeHistory({ sessions, alias }) {
+  return (
+    <GlassCard>
+      <SectionTitle
+        icon={BatteryCharging}
+        title="Historial de recargas"
+        subtitle={`Sesiones enchufadas detectadas en las muestras de ${alias}.`}
+      />
+      {sessions.length === 0 ? (
+        <div className="empty-state">
+          <span className="empty-state__icon">
+            <BatteryCharging size={22} strokeWidth={2} />
+          </span>
+          <strong>Todavía no hay recargas registradas</strong>
+          <p>Cuando este equipo se cargue con la página abierta, la sesión aparecerá aquí con su duración y niveles.</p>
+        </div>
+      ) : (
+        <div className="charge-list">
+          {sessions.slice(0, 8).map((session) => {
+            const sameTime = session.start === session.end;
+            return (
+              <div className="charge-row" key={`${session.start}-${session.end}`}>
+                <span className="charge-row__icon">
+                  <BatteryCharging size={16} strokeWidth={2.1} />
+                </span>
+                <div className="charge-row__text">
+                  <strong>
+                    {dayLabel(session.start)} · {clockTime(session.start)}
+                    {sameTime ? "" : `–${clockTime(session.end)}`}
+                  </strong>
+                  <span>
+                    {session.duration > 0 ? duration(session.duration / 1000) : "1 muestra"} · {session.samples}{" "}
+                    {session.samples === 1 ? "muestra" : "muestras"}
+                  </span>
+                </div>
+                <div className="charge-row__numbers">
+                  <strong>
+                    {session.startLevel} % → {session.endLevel} %
+                  </strong>
+                  <span>{session.delta > 0 ? `+${session.delta}` : session.delta} puntos</span>
+                </div>
+                <Badge tone={session.active ? "good" : session.complete ? "blue" : "neutral"}>
+                  {session.active ? "En curso" : session.complete ? "Completa" : "Parcial"}
+                </Badge>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {sessions.length > 8 ? (
+        <p className="settings-note">Mostrando las 8 recargas más recientes de {sessions.length}.</p>
+      ) : null}
+    </GlassCard>
+  );
 }
 
 export function HistoryView({
@@ -73,6 +130,7 @@ export function HistoryView({
     () => deviceSamples.filter((sample) => sample.t >= Date.now() - (range === "7d" ? 7 * DAY : DAY)),
     [deviceSamples, range],
   );
+  const sessions = useMemo(() => chargeSessions(deviceSamples), [deviceSamples]);
 
   return (
     <>
@@ -174,6 +232,11 @@ export function HistoryView({
           </div>
         )}
       </GlassCard>
+
+      <ChargeHistory
+        sessions={sessions}
+        alias={selectedAlias ?? (mobile ? "las computadoras conectadas" : device.alias)}
+      />
 
       <div className="grid grid-2">
         <GlassCard>

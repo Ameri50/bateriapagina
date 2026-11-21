@@ -10,6 +10,22 @@
       content="BatteryLink Web: batería real de tu dispositivo, especificaciones e historial personal con tu cuenta de Google."
     />
     <title>BatteryLink · Mi batería</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("batterylink.web.theme.v1");
+          var theme =
+            stored === "light" || stored === "dark"
+              ? stored
+              : window.matchMedia("(prefers-color-scheme: light)").matches
+                ? "light"
+                : "dark";
+          document.documentElement.dataset.theme = theme;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", theme === "light" ? "#f4f8f5" : "#070a09");
+        } catch (error) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
